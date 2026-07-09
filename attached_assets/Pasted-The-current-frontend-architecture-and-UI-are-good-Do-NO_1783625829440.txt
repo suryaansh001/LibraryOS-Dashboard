@@ -1,0 +1,292 @@
+The current frontend architecture and UI are good.
+
+Do NOT redesign or modify the existing Owner, Receptionist, or Super Admin dashboards unless absolutely necessary.
+
+Instead, extend the current application by adding a complete Student Portal while maintaining the same design language, component library, spacing, typography, colors, and overall UI consistency.
+
+The Student Portal should feel like it belongs to the same application.
+
+=========================================================
+STUDENT PORTAL (NEW ROLE)
+=========================================================
+
+Add a new role called "Student".
+
+Students should have their own authentication flow and dashboard.
+
+The student portal should be responsive and work well on both desktop and mobile browsers.
+
+The design philosophy should remain:
+
+• Clean
+• Minimal
+• Modern SaaS
+• Fast
+• Premium
+• No visual clutter
+
+=========================================================
+STUDENT LOGIN
+=========================================================
+
+Create a dedicated Student Login page.
+
+Use the same authentication UI style as the Owner Login.
+
+Fields
+
+• Phone Number / Email
+• Password
+
+Future Scope
+
+Phone OTP Authentication.
+
+=========================================================
+STUDENT NAVIGATION
+=========================================================
+
+Create a separate navigation for students.
+
+Sidebar/Menu Items
+
+• Dashboard
+• Attendance
+• Membership
+• Payments
+• Virtual ID Card
+• Notifications
+• Profile
+
+Students should NOT see any owner or admin functionality.
+
+=========================================================
+STUDENT DASHBOARD
+=========================================================
+
+Create a clean dashboard showing
+
+Cards
+
+• Membership Status
+• Current Seat
+• Today's Study Time
+• Total Study Hours This Month
+• Payment Status
+• Membership Expiry Date
+
+Below the cards
+
+• Attendance Summary
+• Recent Activity
+• Latest Notifications
+
+=========================================================
+ATTENDANCE PAGE
+=========================================================
+
+Display complete attendance history.
+
+Columns
+
+• Date
+• Check In
+• Check Out
+• Duration
+
+Also display
+
+Monthly Summary
+
+• Total Visits
+• Total Study Hours
+• Average Daily Hours
+
+=========================================================
+MEMBERSHIP PAGE
+=========================================================
+
+Show
+
+• Membership Type
+• Start Date
+• End Date
+• Status
+
+For Hourly Plans
+
+Display
+
+• Purchased Hours
+• Used Hours
+• Remaining Hours
+
+Include a disabled button
+
+"Renew Online (Coming Soon)"
+
+This will later integrate with Razorpay.
+
+=========================================================
+PAYMENTS PAGE
+=========================================================
+
+Display
+
+Payment History
+
+Columns
+
+• Date
+• Amount
+• Payment Method
+• Status
+• Receipt Number
+
+Also show
+
+Pending Fees
+
+Due Date
+
+Amount Due
+
+At the bottom
+
+Display a disabled button
+
+"Pay Online (Coming Soon)"
+
+No payment gateway implementation yet.
+
+Only UI.
+
+=========================================================
+VIRTUAL ID CARD
+=========================================================
+
+This is one of the most important pages.
+
+Design a premium-looking digital student ID card.
+
+Front Side
+
+• Library Logo
+• Library Name
+• Student Photo
+• Student Name
+• Student ID
+• Membership
+• Seat Number
+• QR Code
+
+Back Side
+
+• Emergency Contact
+• Library Contact
+• Terms / Instructions
+
+The QR Code should be large enough for easy scanning.
+
+When clicked,
+
+open a Full Screen QR View.
+
+The Full Screen QR should
+
+• Maximize QR size
+• Increase screen brightness (UI placeholder)
+• Display Student Name
+• Display Student ID
+
+Include buttons
+
+• Download ID Card
+• Print ID Card
+
+Use placeholder/mock data.
+
+=========================================================
+PROFILE PAGE
+=========================================================
+
+Display
+
+• Photo
+• Name
+• Phone
+• Email
+• Emergency Contact
+• Joining Date
+• Library Name
+
+Profile editing can remain disabled.
+
+=========================================================
+NOTIFICATIONS
+=========================================================
+
+Create a Notification Center.
+
+Display mock notifications such as
+
+• Membership renewed
+• Payment received
+• Membership expires in 5 days
+• Attendance corrected
+• Seat changed
+
+Use the same notification design used elsewhere in the application.
+
+=========================================================
+RESPONSIVENESS
+=========================================================
+
+The Student Portal should work beautifully on
+
+Desktop
+
+Tablet
+
+Mobile Browser
+
+Although a dedicated mobile app is future scope, this web portal should already feel mobile-friendly.
+
+=========================================================
+CONSISTENCY
+=========================================================
+
+Maintain the existing
+
+• Typography
+• Colors
+• Spacing
+• Components
+• Sidebar Style
+• Cards
+• Tables
+• Buttons
+• Icons
+• Animations
+
+Do not introduce a different design language.
+
+The Student Portal should look like it was part of the original application from day one.
+
+=========================================================
+IMPORTANT
+=========================================================
+
+This is a frontend-only task.
+
+Use mock data.
+
+Do not implement backend APIs.
+
+Do not implement authentication logic.
+
+Do not implement Razorpay.
+
+Do not implement QR generation.
+
+Focus entirely on creating a polished, production-quality Student Portal that integrates seamlessly into the existing application.

@@ -35,6 +35,15 @@ import ReceptionistDashboard from "@/pages/receptionist/Dashboard";
 import ReceptionistScanner from "@/pages/receptionist/Scanner";
 import ReceptionistSearch from "@/pages/receptionist/Search";
 
+import StudentLogin from "@/pages/student/Login";
+import StudentDashboard from "@/pages/student/Dashboard";
+import StudentAttendance from "@/pages/student/Attendance";
+import StudentMembership from "@/pages/student/Membership";
+import StudentPayments from "@/pages/student/Payments";
+import StudentIdCard from "@/pages/student/IdCard";
+import StudentNotifications from "@/pages/student/Notifications";
+import StudentProfilePage from "@/pages/student/Profile";
+
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -74,6 +83,16 @@ function Router() {
       <Route path="/receptionist/dashboard" component={ReceptionistDashboard} />
       <Route path="/receptionist/scan" component={ReceptionistScanner} />
       <Route path="/receptionist/search" component={ReceptionistSearch} />
+
+      {/* Student Routes */}
+      <Route path="/student/login" component={StudentLogin} />
+      <Route path="/student/dashboard" component={StudentDashboard} />
+      <Route path="/student/attendance" component={StudentAttendance} />
+      <Route path="/student/membership" component={StudentMembership} />
+      <Route path="/student/payments" component={StudentPayments} />
+      <Route path="/student/id-card" component={StudentIdCard} />
+      <Route path="/student/notifications" component={StudentNotifications} />
+      <Route path="/student/profile" component={StudentProfilePage} />
 
       <Route component={NotFound} />
     </Switch>

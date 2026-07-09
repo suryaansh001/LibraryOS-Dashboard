@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { Link } from "wouter";
-import { BookOpen, Shield, Building2, UserCheck, ArrowRight } from "lucide-react";
+import { BookOpen, Shield, Building2, UserCheck, ArrowRight, GraduationCap } from "lucide-react";
 import { useRole } from "@/context/RoleContext";
 import type { Role } from "@/context/RoleContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -46,6 +46,19 @@ const roles = [
     iconColor: "text-emerald-400",
     tag: "Quick Actions",
     tagColor: "bg-emerald-500/15 text-emerald-400",
+  },
+  {
+    role: "student" as Role,
+    label: "Student",
+    description: "View your attendance, membership, payments, ID card, and study progress.",
+    icon: GraduationCap,
+    href: "/student/login",
+    gradient: "from-sky-600/20 to-cyan-600/20",
+    border: "border-sky-500/20 hover:border-sky-500/50",
+    iconBg: "bg-sky-500/15",
+    iconColor: "text-sky-400",
+    tag: "Student Portal",
+    tagColor: "bg-sky-500/15 text-sky-400",
   },
 ];
 
@@ -94,7 +107,7 @@ export default function RolePicker() {
         </motion.div>
 
         {/* Role Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-3xl">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full max-w-4xl">
           {roles.map((item, i) => {
             const Icon = item.icon;
             return (
