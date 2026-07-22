@@ -1,23 +1,43 @@
 import { motion } from "framer-motion";
 import { BadgeCheck, CalendarDays, Clock, AlertCircle, RefreshCw, Zap } from "lucide-react";
 import StudentLayout from "@/layouts/StudentLayout";
-import { currentStudent } from "@/data/studentData";
+import { useApi } from "@/hooks/useApi";
+import { getStudentMe } from "@/lib/api";
+import { useRole } from "@/context/RoleContext";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
-
-const daysRemaining = 19;
-const daysTotal = 31;
-const pct = Math.round((daysRemaining / daysTotal) * 100);
 
 const membershipFeatures = [
   "Unlimited library access (06:00 AM – 11:00 PM)",
-  "Dedicated seat A-14",
+  "Dedicated seat",
   "QR code check-in",
   "Attendance tracking",
   "Study progress dashboard",
   "Access to reading material shelf",
 ];
 
+const fmtDate = (d: string | null) => (d ? format(new Date(d), "dd MMM yyyy") : "—");
+
 export default function StudentMembership() {
+  const { session } = useRole();
+  const { data: student, loading } = useApi(getStudentMe);
+
+  if (loading || !student) {
+    return (
+      <StudentLayout>
+        <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">Loading…</div>
+      </StudentLayout>
+    );
+  }
+
+  const libraryName = session?.library?.name ?? "Library";
+
+  const endDate = student.membershipEndDate ? new Date(student.membershipEndDate) : null;
+  const now = new Date();
+  const daysRemaining = endDate ? Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / 86400000)) : 0;
+  const daysTotal = 31;
+  const pct = Math.round((daysRemaining / daysTotal) * 100);
+
   return (
     <StudentLayout>
       <div className="mb-5">
@@ -38,18 +58,18 @@ export default function StudentMembership() {
                     <BadgeCheck className="w-5 h-5 text-sky-400" />
                     <span className="text-xs font-semibold text-sky-400 uppercase tracking-wide">Current Plan</span>
                   </div>
-                  <h2 className="text-2xl font-bold text-foreground">{currentStudent.membership} Membership</h2>
+                  <h2 className="text-2xl font-bold text-foreground">{student.membershipType ?? "—"} Membership</h2>
                   <p className="text-3xl font-black text-sky-400 mt-1">₹500<span className="text-base font-normal text-muted-foreground">/month</span></p>
                 </div>
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/20">Active</span>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/20 capitalize">{student.membershipStatus ?? "Active"}</span>
               </div>
 
               <div className="grid grid-cols-2 gap-3 mb-5">
                 {[
-                  { label: "Start Date", value: currentStudent.startDate, icon: CalendarDays },
-                  { label: "Expiry Date", value: currentStudent.expiryDate, icon: CalendarDays },
-                  { label: "Assigned Seat", value: `Seat ${currentStudent.seat}`, icon: Zap },
-                  { label: "Library", value: currentStudent.library, icon: BadgeCheck },
+                  { label: "Start Date", value: fmtDate(student.createdAt), icon: CalendarDays },
+                  { label: "Expiry Date", value: fmtDate(student.membershipEndDate), icon: CalendarDays },
+                  { label: "Assigned Seat", value: `Seat ${student.seatNumber ?? "—"}`, icon: Zap },
+                  { label: "Library", value: libraryName, icon: BadgeCheck },
                 ].map((d, i) => {
                   const Icon = d.icon;
                   return (
@@ -107,11 +127,11 @@ export default function StudentMembership() {
         <div className="space-y-4">
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-card border border-card-border rounded-xl p-4">
             <h3 className="text-sm font-semibold mb-3">Hourly Plan Info</h3>
-            <p className="text-xs text-muted-foreground mb-3">Your current plan is a Monthly flat plan. Hourly plans are also available.</p>
+            <p className="text-xs text-muted-foreground mb-3">Your current plan is a {student.membershipType ?? "monthly"} plan. Hourly plans are also available.</p>
             {[
-              { label: "Purchased Hours", value: "—" },
+              { label: "Purchased Hours", value: student.hoursRemaining != null ? `${student.hoursRemaining}h` : "—" },
               { label: "Used Hours", value: "—" },
-              { label: "Remaining Hours", value: "—" },
+              { label: "Remaining Hours", value: student.hoursRemaining != null ? `${student.hoursRemaining}h` : "—" },
             ].map((h, i) => (
               <div key={i} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
                 <p className="text-xs text-muted-foreground">{h.label}</p>

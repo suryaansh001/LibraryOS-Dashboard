@@ -1,18 +1,36 @@
 import { motion } from "framer-motion";
 import { Download, AlertCircle, CheckCircle2, CreditCard, Wallet } from "lucide-react";
 import StudentLayout from "@/layouts/StudentLayout";
-import { studentPayments, currentStudent } from "@/data/studentData";
+import { useApi } from "@/hooks/useApi";
+import { getStudentMePayments } from "@/lib/api";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const pendingFees = {
-  due: false,
-  amount: 0,
-  dueDate: "Apr 01, 2024",
-};
+const fmtDate = (d: string) => format(new Date(d), "dd MMM yyyy");
 
 export default function StudentPayments() {
-  const total = studentPayments.reduce((s, p) => s + p.amount, 0);
+  const { data, loading, error } = useApi(getStudentMePayments);
+  const payments = data ?? [];
+
+  if (loading) {
+    return (
+      <StudentLayout>
+        <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">Loading…</div>
+      </StudentLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <StudentLayout>
+        <div className="flex items-center justify-center h-64 text-sm text-destructive">{error}</div>
+      </StudentLayout>
+    );
+  }
+
+  const total = payments.reduce((s, p) => s + p.amount, 0);
+  const hasPending = payments.some((p) => p.status.toLowerCase() !== "paid");
 
   return (
     <StudentLayout>
@@ -25,8 +43,8 @@ export default function StudentPayments() {
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
         {[
           { label: "Total Paid", value: `₹${total.toLocaleString()}`, icon: CheckCircle2, color: "text-emerald-500", bg: "bg-emerald-500/10 border-emerald-500/20" },
-          { label: "This Month", value: `₹${studentPayments[0].amount}`, icon: Wallet, color: "text-sky-400", bg: "bg-sky-500/10 border-sky-500/20" },
-          { label: "Current Status", value: currentStudent.paymentStatus, icon: CreditCard, color: "text-emerald-500", bg: "bg-emerald-500/10 border-emerald-500/20" },
+          { label: "Latest Payment", value: payments.length ? `₹${payments[0].amount}` : "₹0", icon: Wallet, color: "text-sky-400", bg: "bg-sky-500/10 border-sky-500/20" },
+          { label: "Current Status", value: hasPending ? "Pending" : "Clear", icon: CreditCard, color: hasPending ? "text-amber-400" : "text-emerald-500", bg: hasPending ? "bg-amber-500/10 border-amber-500/20" : "bg-emerald-500/10 border-emerald-500/20" },
         ].map((s, i) => {
           const Icon = s.icon;
           return (
@@ -42,21 +60,20 @@ export default function StudentPayments() {
       </div>
 
       {/* Pending fees banner */}
-      {pendingFees.due ? (
+      {hasPending ? (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-amber-500/8 border border-amber-500/25 rounded-xl p-4 flex items-start gap-3 mb-4">
           <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="text-sm font-semibold text-amber-400">Pending Payment</p>
-            <p className="text-xs text-muted-foreground mt-0.5">₹{pendingFees.amount} is due by {pendingFees.dueDate}. Please pay at the reception counter or online (coming soon).</p>
+            <p className="text-xs text-muted-foreground mt-0.5">You have a pending payment. Please pay at the reception counter or online (coming soon).</p>
           </div>
-          <p className="text-lg font-black text-amber-400 flex-shrink-0">₹{pendingFees.amount}</p>
         </motion.div>
       ) : (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 flex items-center gap-3 mb-4">
           <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />
           <div>
             <p className="text-sm font-semibold text-emerald-500">All Dues Cleared</p>
-            <p className="text-xs text-muted-foreground">No pending fees. Next payment due on {pendingFees.dueDate}.</p>
+            <p className="text-xs text-muted-foreground">No pending fees.</p>
           </div>
         </motion.div>
       )}
@@ -70,30 +87,35 @@ export default function StudentPayments() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                {["Date", "Amount", "Method", "Plan", "Status", "Receipt"].map((h, i) => (
+                {["Date", "Amount", "Method", "Status", "Receipt"].map((h, i) => (
                   <th key={i} className="text-left text-xs font-medium text-muted-foreground px-4 py-2.5">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {studentPayments.map((p, i) => (
-                <motion.tr key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.06 }} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-3 text-sm font-medium">{p.date}</td>
-                  <td className="px-4 py-3 font-bold text-emerald-500 text-sm">₹{p.amount}</td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs px-2 py-0.5 rounded-md bg-secondary border border-border text-secondary-foreground font-medium">{p.method}</span>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{p.plan}</td>
-                  <td className="px-4 py-3">
-                    <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-md border", p.status === "Paid" ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/20" : "bg-amber-500/15 text-amber-400 border-amber-500/20")}>{p.status}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button className="flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300 font-medium transition-colors">
-                      <Download className="w-3 h-3" /> {p.receipt}
-                    </button>
-                  </td>
-                </motion.tr>
-              ))}
+              {payments.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">No payments yet</td>
+                </tr>
+              ) : (
+                payments.map((p, i) => (
+                  <motion.tr key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.06 }} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-3 text-sm font-medium">{fmtDate(p.paymentDate)}</td>
+                    <td className="px-4 py-3 font-bold text-emerald-500 text-sm">₹{p.amount}</td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs px-2 py-0.5 rounded-md bg-secondary border border-border text-secondary-foreground font-medium capitalize">{p.method}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-md border", p.status.toLowerCase() === "paid" ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/20" : "bg-amber-500/15 text-amber-400 border-amber-500/20")}>{p.status}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button className="flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300 font-medium transition-colors">
+                        <Download className="w-3 h-3" /> Receipt
+                      </button>
+                    </td>
+                  </motion.tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

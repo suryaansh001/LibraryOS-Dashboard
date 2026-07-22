@@ -8,21 +8,37 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sun, Moon } from "lucide-react";
+import { login } from "@/lib/api";
 
 export default function StudentLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [, setLocation] = useLocation();
-  const { setRole } = useRole();
+  const { setSession } = useRole();
   const { theme, setTheme } = useTheme();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      setRole("student");
+    setError(null);
+
+    const formData = new FormData(e.currentTarget);
+
+    try {
+      const session = await login({
+        email: String(formData.get("email") ?? ""),
+        password: String(formData.get("password") ?? ""),
+        librarySlug: String(formData.get("librarySlug") ?? import.meta.env.VITE_DEFAULT_LIBRARY_SLUG ?? ""),
+      });
+
+      setSession(session);
       setLocation("/student/dashboard");
-    }, 900);
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : "Failed to sign in");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -59,11 +75,23 @@ export default function StudentLogin() {
           <div className="bg-card border border-card-border rounded-2xl p-6 space-y-4">
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Phone Number / Email</Label>
+                <Label className="text-xs font-medium">Email address</Label>
                 <Input
+                  name="email"
+                  type="email"
+                  placeholder="arjun.kumar@email.com"
+                  defaultValue="arjun.kumar@email.com"
+                  className="h-10 text-sm"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Library slug</Label>
+                <Input
+                  name="librarySlug"
                   type="text"
-                  placeholder="+91 98765 43210 or email"
-                  defaultValue="+91 98765 43210"
+                  placeholder="readspace-pro"
+                  defaultValue="readspace-pro"
                   className="h-10 text-sm"
                   required
                 />
@@ -75,6 +103,7 @@ export default function StudentLogin() {
                 </div>
                 <div className="relative">
                   <Input
+                    name="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="Enter your password"
                     defaultValue="password123"
@@ -86,6 +115,8 @@ export default function StudentLogin() {
                   </button>
                 </div>
               </div>
+
+              {error && <p className="text-xs text-destructive text-center">{error}</p>}
 
               <Button type="submit" className="w-full h-10 text-sm font-semibold bg-sky-600 hover:bg-sky-700 gap-2" disabled={loading}>
                 {loading ? (

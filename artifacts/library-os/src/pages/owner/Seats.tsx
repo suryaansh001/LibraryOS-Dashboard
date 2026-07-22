@@ -3,31 +3,17 @@ import { motion } from "framer-motion";
 import { X } from "lucide-react";
 import DashboardLayout from "@/layouts/DashboardLayout";
 import PageHeader from "@/components/PageHeader";
-import { mockStudents } from "@/data/mockData";
 import { cn } from "@/lib/utils";
-
-type SeatStatus = "available" | "occupied" | "maintenance";
-
-const generateSeats = () => {
-  const occupiedSeats = new Set(mockStudents.filter(s => s.checkedIn || s.status === "active").slice(0, 23).map(s => s.seat));
-  const maintenanceSeats = new Set(["B-03", "D-07", "C-05"]);
-  return Array.from({ length: 80 }, (_, i) => {
-    const row = String.fromCharCode(65 + Math.floor(i / 10));
-    const num = String(i % 10 + 1).padStart(2, "0");
-    const id = `${row}-${num}`;
-    const status: SeatStatus = maintenanceSeats.has(id) ? "maintenance" : occupiedSeats.has(id) ? "occupied" : "available";
-    const student = mockStudents.find(s => s.seat === id);
-    return { id, row, num, status, student };
-  });
-};
-
-const seats = generateSeats();
-const available = seats.filter(s => s.status === "available").length;
-const occupied = seats.filter(s => s.status === "occupied").length;
-const maintenance = seats.filter(s => s.status === "maintenance").length;
+import { useApi } from "@/hooks/useApi";
+import { getSeats, type SeatListItemDTO } from "@/lib/api";
 
 export default function Seats() {
-  const [selected, setSelected] = useState<typeof seats[0] | null>(null);
+  const { data: seats, loading } = useApi<SeatListItemDTO[]>(getSeats);
+  const [selected, setSelected] = useState<SeatListItemDTO | null>(null);
+
+  const available = (seats ?? []).filter(s => s.status === "available").length;
+  const occupied = (seats ?? []).filter(s => s.status === "occupied").length;
+  const maintenance = (seats ?? []).filter(s => s.status === "maintenance").length;
 
   return (
     <DashboardLayout>
@@ -50,42 +36,47 @@ export default function Seats() {
       <div className="flex gap-5">
         {/* Grid */}
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex-1 bg-card border border-card-border rounded-xl p-5">
-          <div className="grid grid-cols-10 gap-2">
-            {seats.map((seat, i) => (
-              <motion.button
-                key={seat.id}
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: i * 0.003 }}
-                onClick={() => setSelected(selected?.id === seat.id ? null : seat)}
-                className={cn(
-                  "aspect-square rounded-lg text-xs font-mono font-semibold border transition-all",
-                  seat.status === "available" && "bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20",
-                  seat.status === "occupied" && "bg-destructive/15 border-destructive/30 text-destructive hover:bg-destructive/25",
-                  seat.status === "maintenance" && "bg-amber-500/10 border-amber-500/30 text-amber-400",
-                  selected?.id === seat.id && "ring-2 ring-primary ring-offset-1 ring-offset-background scale-105"
-                )}
-                data-testid={`seat-${seat.id}`}
-              >
-                {seat.num}
-              </motion.button>
-            ))}
-          </div>
-          <div className="mt-4 pt-3 border-t border-border flex items-center gap-3 text-xs text-muted-foreground">
-            {"ABCDEFGH".split("").map((row, i) => (
-              <span key={i} className="flex items-center gap-1">
-                <span className="font-mono font-semibold text-foreground">Row {row}</span>
-                <span>({seats.filter(s => s.row === row).length} seats)</span>
-              </span>
-            ))}
-          </div>
+          {loading && <p className="text-sm text-muted-foreground py-8 text-center">Loading seats…</p>}
+          {!loading && (
+            <div className="grid grid-cols-10 gap-2">
+              {(seats ?? []).map((seat, i) => (
+                <motion.button
+                  key={seat.id}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: i * 0.003 }}
+                  onClick={() => setSelected(selected?.id === seat.id ? null : seat)}
+                  className={cn(
+                    "aspect-square rounded-lg text-xs font-mono font-semibold border transition-all",
+                    seat.status === "available" && "bg-emerald-500/10 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/20",
+                    seat.status === "occupied" && "bg-destructive/15 border-destructive/30 text-destructive hover:bg-destructive/25",
+                    seat.status === "maintenance" && "bg-amber-500/10 border-amber-500/30 text-amber-400",
+                    selected?.id === seat.id && "ring-2 ring-primary ring-offset-1 ring-offset-background scale-105"
+                  )}
+                  data-testid={`seat-${seat.seatNumber}`}
+                >
+                  {seat.seatNumber.split("-").pop()}
+                </motion.button>
+              ))}
+            </div>
+          )}
+          {!loading && (seats ?? []).length > 0 && (
+            <div className="mt-4 pt-3 border-t border-border flex items-center gap-3 text-xs text-muted-foreground">
+              {Array.from(new Set((seats ?? []).map(s => (s.section ?? s.seatNumber.split("-")[0]).trim()))).map((row, i) => (
+                <span key={i} className="flex items-center gap-1">
+                  <span className="font-mono font-semibold text-foreground">Row {row}</span>
+                  <span>({(seats ?? []).filter(s => (s.section ?? s.seatNumber.split("-")[0]).trim() === row).length} seats)</span>
+                </span>
+              ))}
+            </div>
+          )}
         </motion.div>
 
         {/* Detail panel */}
         {selected && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="w-64 bg-card border border-card-border rounded-xl p-5 h-fit">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold">Seat {selected.id}</h3>
+              <h3 className="text-sm font-semibold">Seat {selected.seatNumber}</h3>
               <button onClick={() => setSelected(null)} className="text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />
               </button>
@@ -99,13 +90,14 @@ export default function Seats() {
                   "bg-amber-500/15 text-amber-400 border-amber-500/20"
                 )}>{selected.status}</span>
               </div>
-              {selected.student && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Assigned to</p>
-                  <p className="text-sm font-medium">{selected.student.name}</p>
-                  <p className="text-xs text-muted-foreground">{selected.student.membership} · {selected.student.status}</p>
-                </div>
-              )}
+              <div>
+                <p className="text-xs text-muted-foreground">Section</p>
+                <p className="text-sm font-medium mt-0.5">{selected.section ?? "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Type</p>
+                <p className="text-sm font-medium capitalize mt-0.5">{selected.type}</p>
+              </div>
             </div>
             <div className="space-y-2 mt-4">
               {selected.status === "available" && (

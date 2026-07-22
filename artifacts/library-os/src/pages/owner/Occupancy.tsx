@@ -2,22 +2,40 @@ import { motion } from "framer-motion";
 import { Users, DoorOpen, Building2 } from "lucide-react";
 import DashboardLayout from "@/layouts/DashboardLayout";
 import PageHeader from "@/components/PageHeader";
-import { mockStudents } from "@/data/mockData";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { useApi } from "@/hooks/useApi";
+import { getOccupancy, type OccupancyDTO } from "@/lib/api";
+import { format } from "date-fns";
 
-const insideStudents = mockStudents.filter(s => s.checkedIn).map((s, i) => ({
-  ...s,
-  duration: ["1h 45m", "2h 30m", "3h 15m", "4h 00m", "2h 10m", "5h 30m", "1h 20m"][i % 7],
-  statusLabel: i < 5 ? "Normal" : i === 5 ? "Extended" : "Overtime",
-}));
+function getInitials(name: string) {
+  return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function formatTimeSpent(checkInAt: string) {
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(checkInAt).getTime()) / 60000));
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h > 0 ? `${h}h ${m.toString().padStart(2, "0")}m` : `${m}m`;
+}
+
+function statusLabelFor(checkInAt: string) {
+  const minutes = Math.floor((Date.now() - new Date(checkInAt).getTime()) / 60000);
+  if (minutes > 240) return "Overtime";
+  if (minutes > 180) return "Extended";
+  return "Normal";
+}
 
 export default function Occupancy() {
-  const capacity = 80;
-  const occupied = insideStudents.length;
+  const { data, loading } = useApi<OccupancyDTO>(getOccupancy);
+  const capacity = data?.capacity ?? 0;
+  const occupied = data?.currentCount ?? 0;
+  const availableFlexible = data?.availableFlexible ?? 0;
   const available = capacity - occupied;
-  const pct = Math.round((occupied / capacity) * 100);
+  const pct = capacity > 0 ? Math.round((occupied / capacity) * 100) : 0;
+  const activeSessions = data?.activeSessions ?? [];
+  const seats = data?.seats ?? [];
 
   return (
     <DashboardLayout>
@@ -60,6 +78,9 @@ export default function Occupancy() {
           <span>{occupied} occupied</span>
           <span>{available} available</span>
         </div>
+        {availableFlexible > 0 && (
+          <p className="text-xs text-muted-foreground mt-1">{availableFlexible} flexible seats available</p>
+        )}
       </motion.div>
 
       {/* Table */}
@@ -78,33 +99,64 @@ export default function Occupancy() {
               ))}
             </tr></thead>
             <tbody>
-              {insideStudents.map((s, i) => (
-                <motion.tr key={s.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
-                  className={cn("border-b border-border/50 transition-colors hover:bg-muted/30",
-                    s.statusLabel === "Extended" ? "bg-amber-500/5" : s.statusLabel === "Overtime" ? "bg-destructive/5" : ""
-                  )}>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <Avatar className="w-7 h-7"><AvatarFallback className="text-xs bg-primary/15 text-primary">{s.name.split(" ").map(n=>n[0]).join("")}</AvatarFallback></Avatar>
-                      <span className="font-medium text-sm">{s.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{s.seat}</td>
-                  <td className="px-4 py-3 text-sm">{s.checkInTime}</td>
-                  <td className="px-4 py-3 text-sm font-medium">{s.duration}</td>
-                  <td className="px-4 py-3">
-                    <span className={cn("text-xs font-medium px-2 py-0.5 rounded-md border",
-                      s.statusLabel === "Normal" ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/20" :
-                      s.statusLabel === "Extended" ? "bg-amber-500/15 text-amber-400 border-amber-500/20" :
-                      "bg-destructive/15 text-destructive border-destructive/20"
-                    )}>{s.statusLabel}</span>
-                  </td>
-                </motion.tr>
-              ))}
+              {loading && (
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">Loading live occupancy…</td></tr>
+              )}
+              {!loading && activeSessions.map((s, i) => {
+                const statusLabel = statusLabelFor(s.checkInAt);
+                return (
+                  <motion.tr key={s.sessionId} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
+                    className={cn("border-b border-border/50 transition-colors hover:bg-muted/30",
+                      statusLabel === "Extended" ? "bg-amber-500/5" : statusLabel === "Overtime" ? "bg-destructive/5" : ""
+                    )}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar className="w-7 h-7"><AvatarFallback className="text-xs bg-primary/15 text-primary">{getInitials(s.studentName)}</AvatarFallback></Avatar>
+                        <span className="font-medium text-sm">{s.studentName}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{s.seatNumber ?? "—"}</td>
+                    <td className="px-4 py-3 text-sm">{format(new Date(s.checkInAt), "hh:mm a")}</td>
+                    <td className="px-4 py-3 text-sm font-medium">{formatTimeSpent(s.checkInAt)}</td>
+                    <td className="px-4 py-3">
+                      <span className={cn("text-xs font-medium px-2 py-0.5 rounded-md border",
+                        statusLabel === "Normal" ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/20" :
+                        statusLabel === "Extended" ? "bg-amber-500/15 text-amber-400 border-amber-500/20" :
+                        "bg-destructive/15 text-destructive border-destructive/20"
+                      )}>{statusLabel}</span>
+                    </td>
+                  </motion.tr>
+                );
+              })}
+              {!loading && activeSessions.length === 0 && (
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">No one is currently inside</td></tr>
+              )}
             </tbody>
           </table>
         </div>
       </motion.div>
+
+      {/* Seats grid */}
+      {!loading && seats.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="bg-card border border-card-border rounded-xl p-5 mt-5">
+          <p className="text-sm font-medium mb-4">Seat Status</p>
+          <div className="grid grid-cols-10 gap-2">
+            {seats.map((seat) => (
+              <div
+                key={seat.seatNumber}
+                className={cn(
+                  "aspect-square rounded-lg text-xs font-mono font-semibold border flex items-center justify-center",
+                  seat.status === "available" && "bg-emerald-500/10 border-emerald-500/30 text-emerald-500",
+                  seat.status === "occupied" && "bg-destructive/15 border-destructive/30 text-destructive",
+                  seat.status === "maintenance" && "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                )}
+              >
+                {seat.seatNumber.split("-").pop()}
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
     </DashboardLayout>
   );
 }

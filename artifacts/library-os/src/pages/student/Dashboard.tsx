@@ -2,17 +2,11 @@ import { motion } from "framer-motion";
 import { BadgeCheck, MapPin, Clock, CalendarDays, CreditCard, AlertCircle, QrCode, Wallet, RefreshCw, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
 import StudentLayout from "@/layouts/StudentLayout";
-import { currentStudent, studentAttendance, studentNotifications } from "@/data/studentData";
+import { useApi } from "@/hooks/useApi";
+import { getStudentMe, getStudentMeAttendance } from "@/lib/api";
+import { useRole } from "@/context/RoleContext";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-
-const stats = [
-  { label: "Membership Status", value: currentStudent.membershipStatus, sub: currentStudent.membership + " Plan", icon: BadgeCheck, color: "text-sky-400", bg: "bg-sky-500/10", border: "border-sky-500/20", valueColor: "text-emerald-500" },
-  { label: "Current Seat", value: currentStudent.seat, sub: "Assigned to you", icon: MapPin, color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20", valueColor: "text-foreground" },
-  { label: "Today's Study Time", value: currentStudent.todayStudyTime, sub: "Still studying", icon: Clock, color: "text-indigo-400", bg: "bg-indigo-500/10", border: "border-indigo-500/20", valueColor: "text-foreground", live: true },
-  { label: "Total Hours This Month", value: currentStudent.monthlyStudyHours, sub: "March 2024", icon: CalendarDays, color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20", valueColor: "text-foreground" },
-  { label: "Payment Status", value: currentStudent.paymentStatus, sub: "March dues", icon: CreditCard, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", valueColor: "text-emerald-500" },
-  { label: "Membership Expiry", value: currentStudent.expiryDate, sub: "Renew before this", icon: AlertCircle, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", valueColor: "text-amber-400" },
-];
 
 const quickActions = [
   { label: "Scan QR", icon: QrCode, href: "/student/id-card", color: "bg-sky-500/15 text-sky-400 border-sky-500/20 hover:bg-sky-500/25" },
@@ -21,18 +15,45 @@ const quickActions = [
   { label: "Renew", icon: RefreshCw, href: "/student/membership", color: "bg-amber-500/15 text-amber-400 border-amber-500/20 hover:bg-amber-500/25" },
 ];
 
+const fmtDate = (d: string | null) => (d ? format(new Date(d), "dd MMM yyyy") : "—");
+
 export default function StudentDashboard() {
-  const presentDays = studentAttendance.filter(a => a.status === "Present").length;
-  const absentDays = studentAttendance.filter(a => a.status === "Absent").length;
-  const recentActivity = studentAttendance.slice(0, 5);
-  const unreadNotifs = studentNotifications.filter(n => !n.read);
+  const { session } = useRole();
+  const { data: student, loading } = useApi(getStudentMe);
+  const { data: attendance } = useApi(getStudentMeAttendance);
+
+  const libraryName = session?.library?.name ?? "Library";
+  const sessions = attendance ?? [];
+
+  const presentDays = sessions.length;
+  const absentDays = 0;
+  const total = presentDays + absentDays;
+  const rate = total > 0 ? Math.round((presentDays / total) * 100) : 0;
+  const recentActivity = sessions.slice(0, 5);
+
+  if (loading || !student) {
+    return (
+      <StudentLayout>
+        <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">Loading…</div>
+      </StudentLayout>
+    );
+  }
+
+  const stats = [
+    { label: "Membership Status", value: student.membershipStatus ?? "—", sub: `${student.membershipType ?? "—"} Plan`, icon: BadgeCheck, color: "text-sky-400", bg: "bg-sky-500/10", border: "border-sky-500/20", valueColor: "text-emerald-500" },
+    { label: "Current Seat", value: student.seatNumber ?? "—", sub: "Assigned to you", icon: MapPin, color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20", valueColor: "text-foreground" },
+    { label: "Membership Type", value: student.membershipType ?? "—", sub: "Active plan", icon: CreditCard, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", valueColor: "text-foreground" },
+    { label: "Hours Remaining", value: student.hoursRemaining != null ? `${student.hoursRemaining}h` : "—", sub: "Available balance", icon: Clock, color: "text-indigo-400", bg: "bg-indigo-500/10", border: "border-indigo-500/20", valueColor: "text-foreground" },
+    { label: "Account Status", value: student.status ?? "—", sub: "Account", icon: BadgeCheck, color: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20", valueColor: "text-foreground" },
+    { label: "Membership Expiry", value: fmtDate(student.membershipEndDate), sub: "Renew before this", icon: AlertCircle, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", valueColor: "text-amber-400" },
+  ];
 
   return (
     <StudentLayout>
       {/* Welcome */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-5">
-        <h1 className="text-xl font-bold text-foreground">Good morning, {currentStudent.name.split(" ")[0]} 👋</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">{currentStudent.library} · Seat {currentStudent.seat} · {new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+        <h1 className="text-xl font-bold text-foreground">Good morning, {student.name.split(" ")[0]} 👋</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">{libraryName} · Seat {student.seatNumber ?? "—"} · {new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
       </motion.div>
 
       {/* Quick actions */}
@@ -69,7 +90,6 @@ export default function StudentDashboard() {
                   <p className={`text-lg font-bold ${s.valueColor}`}>{s.value}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">{s.sub}</p>
                 </div>
-                {s.live && <span className="flex items-center gap-1 text-xs text-emerald-500"><span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Live</span>}
               </div>
             </motion.div>
           );
@@ -85,9 +105,9 @@ export default function StudentDashboard() {
           </div>
           <div className="grid grid-cols-3 gap-2 mb-3">
             {[
-              { label: "Present", value: presentDays, color: "text-emerald-500", bg: "bg-emerald-500/10 border-emerald-500/20" },
+              { label: "Visits", value: presentDays, color: "text-emerald-500", bg: "bg-emerald-500/10 border-emerald-500/20" },
               { label: "Absent", value: absentDays, color: "text-destructive", bg: "bg-destructive/10 border-destructive/20" },
-              { label: "Total", value: presentDays + absentDays, color: "text-foreground", bg: "bg-muted border-border" },
+              { label: "Total", value: total, color: "text-foreground", bg: "bg-muted border-border" },
             ].map((s, i) => (
               <div key={i} className={`rounded-lg border p-2.5 text-center ${s.bg}`}>
                 <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
@@ -99,10 +119,10 @@ export default function StudentDashboard() {
           <div>
             <div className="flex justify-between text-xs text-muted-foreground mb-1">
               <span>Attendance Rate</span>
-              <span className="font-semibold text-emerald-500">{Math.round((presentDays / (presentDays + absentDays)) * 100)}%</span>
+              <span className="font-semibold text-emerald-500">{rate}%</span>
             </div>
             <div className="h-2 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${Math.round((presentDays / (presentDays + absentDays)) * 100)}%` }} />
+              <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${rate}%` }} />
             </div>
           </div>
           <Link href="/student/attendance" className="block mt-3 text-xs text-sky-400 hover:text-sky-300 font-medium flex items-center gap-1">View full history <ChevronRight className="w-3.5 h-3.5" /></Link>
@@ -115,20 +135,22 @@ export default function StudentDashboard() {
             <Link href="/student/attendance" className="text-xs text-sky-400 hover:text-sky-300">View all</Link>
           </div>
           <div className="space-y-2.5">
-            {recentActivity.map((a, i) => (
-              <div key={i} className="flex items-center gap-2.5 text-sm">
-                <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0 mt-0.5", a.status === "Present" ? "bg-emerald-500" : "bg-destructive")} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-foreground">{a.date}</p>
-                  {a.status === "Present" ? (
-                    <p className="text-xs text-muted-foreground">{a.checkIn} – {a.checkOut} · {a.duration}</p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Absent</p>
-                  )}
+            {recentActivity.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No activity yet</p>
+            ) : (
+              recentActivity.map((a) => (
+                <div key={a.id} className="flex items-center gap-2.5 text-sm">
+                  <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0 mt-0.5", a.checkOutAt ? "bg-emerald-500" : "bg-amber-400")} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-foreground">{format(new Date(a.checkInAt), "dd MMM yyyy")}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {format(new Date(a.checkInAt), "hh:mm a")} – {a.checkOutAt ? format(new Date(a.checkOutAt), "hh:mm a") : "—"} · {a.durationMinutes != null ? `${Math.floor(a.durationMinutes / 60)}h ${a.durationMinutes % 60}m` : "—"}
+                    </p>
+                  </div>
+                  <span className={cn("text-xs font-medium flex-shrink-0", a.checkOutAt ? "text-emerald-500" : "text-amber-400")}>{a.checkOutAt ? "Completed" : "Active"}</span>
                 </div>
-                <span className={cn("text-xs font-medium flex-shrink-0", a.status === "Present" ? "text-emerald-500" : "text-destructive")}>{a.status}</span>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </motion.div>
 
@@ -139,16 +161,7 @@ export default function StudentDashboard() {
             <Link href="/student/notifications" className="text-xs text-sky-400 hover:text-sky-300">View all</Link>
           </div>
           <div className="space-y-2.5">
-            {unreadNotifs.slice(0, 3).map((n, i) => (
-              <div key={i} className={cn("flex items-start gap-2.5 p-2.5 rounded-lg border", n.type === "warning" ? "bg-amber-500/5 border-amber-500/20" : n.type === "success" ? "bg-emerald-500/5 border-emerald-500/20" : "bg-sky-500/5 border-sky-500/20")}>
-                <div className={cn("w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0", n.type === "warning" ? "bg-amber-400" : n.type === "success" ? "bg-emerald-500" : "bg-sky-400")} />
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-foreground">{n.title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>
-                  <p className="text-xs text-muted-foreground/60 mt-1">{n.time}</p>
-                </div>
-              </div>
-            ))}
+            <p className="text-xs text-muted-foreground">No notifications yet</p>
           </div>
         </motion.div>
       </div>

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, ChevronRight, Upload, User } from "lucide-react";
+import { Check, ChevronRight, Upload, User, Copy } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,7 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { createStudent, getSeats, type SeatListItemDTO } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 
 const steps = ["Basic Information", "Membership", "Seat Assignment"];
 const memberships = [
@@ -29,20 +35,54 @@ const schema = z.object({
   emergencyContact: z.string().optional(),
 });
 
-const seats = Array.from({ length: 40 }, (_, i) => ({
-  id: `${String.fromCharCode(65 + Math.floor(i / 10))}-${String(i % 10 + 1).padStart(2, "0")}`,
-  occupied: [3, 7, 12, 15, 18, 22, 25].includes(i),
-}));
-
 export default function AddStudent() {
   const [step, setStep] = useState(0);
   const [selectedMembership, setSelectedMembership] = useState("Monthly");
   const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<"paid" | "pending">("paid");
+  const [seatsList, setSeatsList] = useState<SeatListItemDTO[]>([]);
+  const [seatsLoading, setSeatsLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [createdInfo, setCreatedInfo] = useState<{ name: string; email: string; password: string } | null>(null);
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    getSeats()
+      .then((list) => { setSeatsList(list); setSeatsLoading(false); })
+      .catch(() => setSeatsLoading(false));
+  }, []);
 
   const form = useForm({ resolver: zodResolver(schema), defaultValues: { name: "", phone: "", email: "", address: "", emergencyContact: "" } });
 
-  const handleSubmit = () => { setLocation("/students"); };
+  const handleSubmit = async () => {
+    const values = form.getValues();
+    setSubmitting(true);
+    try {
+      const student = await createStudent({
+        name: values.name,
+        phone: values.phone,
+        email: values.email || undefined,
+        status: "active",
+        seatId: selectedSeat ?? undefined,
+        paymentStatus,
+        customFields: {
+          membership: selectedMembership,
+          address: values.address,
+          emergencyContact: values.emergencyContact,
+        },
+      });
+      setCreatedInfo({
+        name: student.name,
+        email: student.email ?? values.email ?? `${student.id}@student.local`,
+        password: student.password ?? "",
+      });
+    } catch (e) {
+      toast({ title: "Failed to create student", description: e instanceof Error ? e.message : "An error occurred", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -130,6 +170,13 @@ export default function AddStudent() {
                     </button>
                   ))}
                 </div>
+                <div className="space-y-1.5 mb-4">
+                  <Label className="text-xs">Payment Status</Label>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setPaymentStatus("paid")} className={cn("flex-1 h-9 rounded-lg text-xs font-medium border transition-all", paymentStatus === "paid" ? "border-emerald-500 bg-emerald-500/10 text-emerald-500" : "border-border text-muted-foreground hover:border-border/80")}>Paid</button>
+                    <button type="button" onClick={() => setPaymentStatus("pending")} className={cn("flex-1 h-9 rounded-lg text-xs font-medium border transition-all", paymentStatus === "pending" ? "border-amber-500 bg-amber-500/10 text-amber-500" : "border-border text-muted-foreground hover:border-border/80")}>Pending</button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Start Date</Label>
@@ -156,21 +203,28 @@ export default function AddStudent() {
                   <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-destructive/20 border border-destructive/40" /> Occupied</span>
                   <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-primary border border-primary" /> Selected</span>
                 </div>
-                <div className="grid grid-cols-8 gap-1.5 mb-4">
-                  {seats.map((seat) => (
-                    <button key={seat.id} disabled={seat.occupied} onClick={() => setSelectedSeat(seat.id)}
-                      className={cn("h-9 rounded text-xs font-mono font-medium transition-all",
-                        seat.occupied ? "bg-destructive/15 text-destructive/50 cursor-not-allowed border border-destructive/20" :
-                        selectedSeat === seat.id ? "bg-primary text-primary-foreground border border-primary" :
-                        "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 hover:bg-emerald-500/20"
-                      )}>
-                      {seat.id.split("-")[1]}
-                    </button>
-                  ))}
-                </div>
+                {seatsLoading ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">Loading seats...</p>
+                ) : (
+                  <div className="grid grid-cols-8 gap-1.5 mb-4">
+                    {seatsList.map((seat) => {
+                      const occupied = seat.status === "occupied";
+                      return (
+                        <button key={seat.id} disabled={occupied} onClick={() => setSelectedSeat(seat.id)}
+                          className={cn("h-9 rounded text-xs font-mono font-medium transition-all",
+                            occupied ? "bg-destructive/15 text-destructive/50 cursor-not-allowed border border-destructive/20" :
+                            selectedSeat === seat.id ? "bg-primary text-primary-foreground border border-primary" :
+                            "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 hover:bg-emerald-500/20"
+                          )}>
+                          {seat.seatNumber}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 {selectedSeat && (
                   <div className="bg-primary/10 border border-primary/20 rounded-lg px-4 py-3 text-sm">
-                    Selected: <span className="font-bold font-mono text-primary">{selectedSeat}</span>
+                    Selected: <span className="font-bold font-mono text-primary">{seatsList.find(s => s.id === selectedSeat)?.seatNumber}</span>
                   </div>
                 )}
               </div>
@@ -189,13 +243,40 @@ export default function AddStudent() {
                 Continue <ChevronRight className="w-3.5 h-3.5" />
               </Button>
             ) : (
-              <Button size="sm" className="h-8 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={handleSubmit}>
-                <Check className="w-3.5 h-3.5" /> Create Student
+              <Button size="sm" className="h-8 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700" onClick={handleSubmit} disabled={submitting}>
+                {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Create Student
               </Button>
             )}
           </div>
         </div>
       </div>
+
+      {/* Credentials dialog */}
+      <Dialog open={createdInfo !== null} onOpenChange={(open) => { if (!open) { setCreatedInfo(null); setLocation("/students"); } }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-500" /> Student Created</DialogTitle>
+          </DialogHeader>
+          {createdInfo && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">Share these credentials with <span className="font-semibold text-foreground">{createdInfo.name}</span>:</p>
+              <div className="bg-muted/30 rounded-lg p-4 space-y-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <div><span className="text-xs text-muted-foreground">Email</span><p className="font-mono font-medium">{createdInfo.email}</p></div>
+                  <button type="button" onClick={() => { navigator.clipboard.writeText(createdInfo.email); toast({ title: "Copied" }); }} className="text-muted-foreground hover:text-foreground"><Copy className="w-3.5 h-3.5" /></button>
+                </div>
+                <div className="border-t border-border/50" />
+                <div className="flex items-center justify-between">
+                  <div><span className="text-xs text-muted-foreground">Password</span><p className="font-mono font-medium">{createdInfo.password}</p></div>
+                  <button type="button" onClick={() => { navigator.clipboard.writeText(createdInfo.password); toast({ title: "Copied" }); }} className="text-muted-foreground hover:text-foreground"><Copy className="w-3.5 h-3.5" /></button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">Students log in at the Student Portal with their email and this password.</p>
+              <Button size="sm" className="w-full h-9 text-sm" onClick={() => { setCreatedInfo(null); setLocation("/students"); }}>Done</Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

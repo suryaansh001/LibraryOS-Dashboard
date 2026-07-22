@@ -1,36 +1,144 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { TrendingDown, TrendingUp, Receipt, Percent, Plus } from "lucide-react";
+import { TrendingDown, TrendingUp, Receipt, Percent, Plus, Loader2 } from "lucide-react";
 import DashboardLayout from "@/layouts/DashboardLayout";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
-import { mockExpenses } from "@/data/mockData";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useApi } from "@/hooks/useApi";
+import { useToast } from "@/hooks/use-toast";
+import { getExpenses, createExpense, type ExpenseListItemDTO, type ExpenseCategory } from "@/lib/api";
+import { format } from "date-fns";
 
-const expenseByCategory = [
-  { name: "Rent", value: 1200, color: "hsl(239 84% 67%)" },
-  { name: "Staff", value: 580, color: "hsl(160 84% 39%)" },
-  { name: "Electricity", value: 140, color: "hsl(38 92% 50%)" },
-  { name: "Internet", value: 60, color: "hsl(280 67% 60%)" },
-  { name: "Other", value: 160, color: "hsl(215 15% 55%)" },
+const CATEGORIES: { value: ExpenseCategory; label: string }[] = [
+  { value: "rent", label: "Rent" },
+  { value: "electricity", label: "Electricity" },
+  { value: "internet", label: "Internet" },
+  { value: "salary", label: "Salary" },
+  { value: "maintenance", label: "Maintenance" },
+  { value: "miscellaneous", label: "Miscellaneous" },
+  { value: "supplies", label: "Supplies" },
+  { value: "marketing", label: "Marketing" },
+  { value: "other", label: "Other" },
 ];
 
-const monthlyExpenses = [
-  { month: "Oct", expenses: 1950 }, { month: "Nov", expenses: 2100 }, { month: "Dec", expenses: 2300 },
-  { month: "Jan", expenses: 2200 }, { month: "Feb", expenses: 2050 }, { month: "Mar", expenses: 2140 },
-];
+const CATEGORY_COLORS: Record<string, string> = {
+  rent: "hsl(239 84% 67%)",
+  salary: "hsl(160 84% 39%)",
+  electricity: "hsl(38 92% 50%)",
+  internet: "hsl(280 67% 60%)",
+  maintenance: "hsl(0 72% 51%)",
+  miscellaneous: "hsl(215 15% 55%)",
+  supplies: "hsl(199 89% 48%)",
+  marketing: "hsl(330 81% 60%)",
+  other: "hsl(215 15% 55%)",
+};
 
 const TooltipStyle = {
   contentStyle: { background: "hsl(222 42% 10%)", border: "1px solid hsl(220 30% 16%)", borderRadius: 8, fontSize: 12 },
   labelStyle: { color: "hsl(215 20% 90%)" },
 };
 
+function buildCategoryData(expenses: ExpenseListItemDTO[]) {
+  const map = new Map<string, number>();
+  for (const e of expenses) {
+    map.set(e.category, (map.get(e.category) ?? 0) + e.amount);
+  }
+  return Array.from(map.entries()).map(([name, value]) => ({
+    name: name.charAt(0).toUpperCase() + name.slice(1),
+    value,
+    color: CATEGORY_COLORS[name] ?? CATEGORY_COLORS.other,
+  }));
+}
+
+function buildMonthlyData(expenses: ExpenseListItemDTO[]) {
+  const map = new Map<string, number>();
+  for (const e of expenses) {
+    const key = format(new Date(e.expenseDate), "MMM");
+    map.set(key, (map.get(key) ?? 0) + e.amount);
+  }
+  return Array.from(map.entries()).map(([month, expenses]) => ({ month, expenses }));
+}
+
+function AddExpenseDialog({ onSuccess }: { onSuccess: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [category, setCategory] = useState<ExpenseCategory>("rent");
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!amount) return;
+    setSubmitting(true);
+    try {
+      await createExpense({
+        category,
+        amount: Number(amount),
+        description: description || undefined,
+        expenseDate: new Date().toISOString().slice(0, 10),
+      });
+      toast({ title: "Expense added", description: `₹${amount} for ${category}` });
+      setOpen(false);
+      setAmount("");
+      setDescription("");
+      onSuccess();
+    } catch (err) {
+      toast({ title: "Failed to add expense", description: err instanceof Error ? err.message : "An error occurred", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" className="gap-1.5 text-xs h-8"><Plus className="w-3.5 h-3.5" /> Add Expense</Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader><DialogTitle>Add Expense</DialogTitle></DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Category</Label>
+            <select value={category} onChange={e => setCategory(e.target.value as ExpenseCategory)} className="w-full h-9 text-sm bg-background border border-input rounded-md px-3 text-foreground" required>
+              {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Amount (₹)</Label>
+            <Input type="number" min="1" step="1" value={amount} onChange={e => setAmount(e.target.value)} placeholder="1000" className="h-9 text-sm" required />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Description</Label>
+            <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="Monthly rent payment" className="h-9 text-sm" />
+          </div>
+          <Button type="submit" className="w-full h-9 text-sm gap-1.5" disabled={submitting || !amount}>
+            {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null} Add Expense
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Expenses() {
-  const totalExpenses = mockExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const { data: expenses, loading, refetch } = useApi<ExpenseListItemDTO[]>(getExpenses);
+  const list = expenses ?? [];
+  const totalExpenses = list.reduce((sum, e) => sum + e.amount, 0);
+  const expenseByCategory = buildCategoryData(list);
+  const monthlyExpenses = buildMonthlyData(list);
+
   return (
     <DashboardLayout>
-      <PageHeader title="Expenses" description="Track and manage library expenses" actions={<Button size="sm" className="gap-1.5 text-xs h-8"><Plus className="w-3.5 h-3.5" /> Add Expense</Button>} />
+      <PageHeader title="Expenses" description="Track and manage library expenses" actions={<AddExpenseDialog onSuccess={() => refetch()} />} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard title="Revenue" value="₹4,820" trend="+₹340" trendUp icon={TrendingUp} iconColor="text-emerald-400" iconBg="bg-emerald-500/10" index={0} />
@@ -60,6 +168,7 @@ export default function Expenses() {
                     <span className="font-medium">₹{e.value}</span>
                   </div>
                 ))}
+                {expenseByCategory.length === 0 && <p className="text-xs text-muted-foreground">No expenses recorded</p>}
               </div>
             </CardContent>
           </Card>
@@ -78,6 +187,7 @@ export default function Expenses() {
                   <Bar dataKey="expenses" fill="hsl(0 72% 51%)" radius={[4,4,0,0]} opacity={0.8} />
                 </BarChart>
               </ResponsiveContainer>
+              {monthlyExpenses.length === 0 && <p className="text-xs text-muted-foreground text-center">No expenses recorded</p>}
             </CardContent>
           </Card>
         </motion.div>
@@ -92,20 +202,24 @@ export default function Expenses() {
             ))}
           </tr></thead>
           <tbody>
-            {mockExpenses.map((e, i) => (
+            {loading && (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">Loading expenses…</td></tr>
+            )}
+            {!loading && list.map((e, i) => (
               <tr key={e.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                 <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{e.id}</td>
-                <td className="px-4 py-2.5"><span className="text-xs px-2 py-0.5 rounded-md bg-secondary border border-border text-secondary-foreground font-medium">{e.category}</span></td>
-                <td className="px-4 py-2.5 text-sm">{e.description}</td>
+                <td className="px-4 py-2.5"><span className="text-xs px-2 py-0.5 rounded-md bg-secondary border border-border text-secondary-foreground font-medium capitalize">{e.category}</span></td>
+                <td className="px-4 py-2.5 text-sm">{e.description ?? "—"}</td>
                 <td className="px-4 py-2.5 font-bold text-destructive">₹{e.amount}</td>
-                <td className="px-4 py-2.5 text-xs text-muted-foreground">{e.date}</td>
+                <td className="px-4 py-2.5 text-xs text-muted-foreground">{format(new Date(e.expenseDate), "dd MMM yyyy")}</td>
                 <td className="px-4 py-2.5">
-                  {e.receipt
-                    ? <span className="text-xs text-emerald-500 font-medium">Yes</span>
-                    : <span className="text-xs text-muted-foreground">No</span>}
+                  <span className="text-xs text-muted-foreground">—</span>
                 </td>
               </tr>
             ))}
+            {!loading && list.length === 0 && (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">No expenses found</td></tr>
+            )}
           </tbody>
         </table>
       </motion.div>

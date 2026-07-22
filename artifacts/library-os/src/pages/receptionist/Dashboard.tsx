@@ -1,13 +1,19 @@
 import { motion } from "framer-motion";
 import { QrCode, Search, Wallet, UserCheck, Users, DoorOpen } from "lucide-react";
 import { Link } from "wouter";
+import { format } from "date-fns";
 import ReceptionistLayout from "@/layouts/ReceptionistLayout";
-import { mockStudents } from "@/data/mockData";
+import { useApi } from "@/hooks/useApi";
+import { getOccupancy, listAttendance, type OccupancyActiveSessionDTO } from "@/lib/api";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-const insideStudents = mockStudents.filter(s => s.checkedIn);
-
 export default function ReceptionistDashboard() {
+  const { data: occupancy, loading: occLoading, error: occError } = useApi(getOccupancy);
+  const { data: todaysAttendance } = useApi(() => listAttendance({ limit: 100 }));
+
+  const insideStudents: OccupancyActiveSessionDTO[] = occupancy?.activeSessions ?? [];
+  const todaysCount = todaysAttendance?.length ?? 0;
+
   return (
     <ReceptionistLayout>
       <div className="max-w-2xl mx-auto space-y-5">
@@ -46,9 +52,9 @@ export default function ReceptionistDashboard() {
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3">
           {[
-            { label: "Currently Inside", value: insideStudents.length.toString(), icon: UserCheck, color: "text-emerald-500" },
-            { label: "Today's Attendance", value: "47", icon: Users, color: "text-indigo-400" },
-            { label: "Available Seats", value: "57", icon: DoorOpen, color: "text-blue-400" },
+            { label: "Currently Inside", value: occLoading ? "—" : (occupancy?.currentCount ?? 0).toString(), icon: UserCheck, color: "text-emerald-500" },
+            { label: "Today's Attendance", value: todaysCount.toString(), icon: Users, color: "text-indigo-400" },
+            { label: "Available Seats", value: occLoading ? "—" : (occupancy?.availableFlexible ?? 0).toString(), icon: DoorOpen, color: "text-blue-400" },
           ].map((s, i) => {
             const Icon = s.icon;
             return (
@@ -71,17 +77,23 @@ export default function ReceptionistDashboard() {
             </span>
           </div>
           <div className="divide-y divide-border/50">
+            {occError && (
+              <div className="px-4 py-3 text-xs text-destructive">Failed to load occupancy: {occError}</div>
+            )}
+            {!occError && insideStudents.length === 0 && (
+              <div className="px-4 py-6 text-center text-sm text-muted-foreground">No students currently inside</div>
+            )}
             {insideStudents.slice(0, 8).map((s) => (
-              <div key={s.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors">
+              <div key={s.sessionId} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors">
                 <Avatar className="w-8 h-8 flex-shrink-0">
-                  <AvatarFallback className="text-xs bg-primary/15 text-primary">{s.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                  <AvatarFallback className="text-xs bg-primary/15 text-primary">{s.studentName.split(" ").map(n => n[0]).join("")}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{s.name}</p>
-                  <p className="text-xs text-muted-foreground">Seat {s.seat}</p>
+                  <p className="text-sm font-medium text-foreground truncate">{s.studentName}</p>
+                  <p className="text-xs text-muted-foreground">Seat {s.seatNumber ?? "—"}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-xs text-emerald-500 font-medium">{s.checkInTime}</p>
+                  <p className="text-xs text-emerald-500 font-medium">{format(new Date(s.checkInAt), "dd MMM HH:mm")}</p>
                   <p className="text-xs text-muted-foreground">Check-in</p>
                 </div>
               </div>

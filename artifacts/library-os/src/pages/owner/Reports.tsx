@@ -1,9 +1,15 @@
 import { motion } from "framer-motion";
-import { Download, FileText, FileSpreadsheet, ClipboardList, Users, CreditCard, Receipt, BarChart2 } from "lucide-react";
+import { Download, FileText, FileSpreadsheet, ClipboardList, Users, CreditCard, Receipt, BarChart2, Loader2, TrendingUp, UserCheck, AlertCircle, Clock } from "lucide-react";
 import DashboardLayout from "@/layouts/DashboardLayout";
 import PageHeader from "@/components/PageHeader";
+import StatCard from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Area, AreaChart } from "recharts";
+import { useApi } from "@/hooks/useApi";
+import { getDashboard, type DashboardDTO } from "@/lib/api";
+import { format } from "date-fns";
 
 const reports = [
   {
@@ -68,10 +74,77 @@ const reports = [
   },
 ];
 
+const TooltipStyle = {
+  contentStyle: { background: "hsl(222 42% 10%)", border: "1px solid hsl(220 30% 16%)", borderRadius: 8, fontSize: 12 },
+  labelStyle: { color: "hsl(215 20% 90%)" },
+};
+
 export default function Reports() {
+  const { data: dashboard, loading } = useApi<DashboardDTO>(getDashboard);
+
+  const revenue30d = (dashboard?.revenue30d ?? []).map(d => ({ ...d, label: format(new Date(d.date), "dd MMM") }));
+  const attendance30d = (dashboard?.attendance30d ?? []).map(d => ({ ...d, label: format(new Date(d.date), "dd MMM") }));
+
   return (
     <DashboardLayout>
       <PageHeader title="Reports" description="Download and export library data reports" />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <StatCard title="Today's Check-ins" value={String(dashboard?.todayCheckins ?? 0)} trend={`${dashboard?.currentOccupancy ?? 0} inside now`} trendUp icon={Clock} iconColor="text-blue-400" iconBg="bg-blue-500/10" index={0} />
+        <StatCard title="Monthly Revenue" value={`₹${(dashboard?.monthlyRevenue ?? 0).toLocaleString()}`} trend="This month" trendUp icon={TrendingUp} iconColor="text-emerald-400" iconBg="bg-emerald-500/10" index={1} />
+        <StatCard title="Active Students" value={String(dashboard?.activeStudents ?? 0)} trend="Total enrolled" trendUp icon={UserCheck} iconColor="text-indigo-400" iconBg="bg-indigo-500/10" index={2} />
+        <StatCard title="Pending Fees" value={`₹${(dashboard?.pendingFeesAmount ?? 0).toLocaleString()}`} trend={`${dashboard?.pendingFeesCount ?? 0} due`} trendUp={false} icon={AlertCircle} iconColor="text-destructive" iconBg="bg-destructive/10" index={3} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+          <Card className="h-full">
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Revenue (Last 30 Days)</CardTitle></CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="flex items-center justify-center h-[220px] text-sm text-muted-foreground"><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Loading…</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <AreaChart data={revenue30d}>
+                    <defs>
+                      <linearGradient id="revFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(160 84% 39%)" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="hsl(160 84% 39%)" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 30% 16%)" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: "hsl(215 15% 55%)" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: "hsl(215 15% 55%)" }} axisLine={false} tickLine={false} tickFormatter={v => `₹${(v/1000).toFixed(1)}k`} />
+                    <Tooltip {...TooltipStyle} formatter={(v: number) => [`₹${v}`, "Revenue"]} />
+                    <Area type="monotone" dataKey="amount" stroke="hsl(160 84% 39%)" strokeWidth={2} fill="url(#revFill)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+          <Card className="h-full">
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Attendance (Last 30 Days)</CardTitle></CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="flex items-center justify-center h-[220px] text-sm text-muted-foreground"><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Loading…</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={attendance30d}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 30% 16%)" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: "hsl(215 15% 55%)" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: "hsl(215 15% 55%)" }} axisLine={false} tickLine={false} />
+                    <Tooltip {...TooltipStyle} formatter={(v: number) => [`${v}`, "Check-ins"]} />
+                    <Bar dataKey="count" fill="hsl(239 84% 67%)" radius={[4, 4, 0, 0]} opacity={0.85} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {reports.map((r, i) => {

@@ -1,31 +1,101 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Scan, CheckCircle2, XCircle, Users, UserCheck, QrCode } from "lucide-react";
+import { format } from "date-fns";
+import { CheckCircle2, XCircle, Users, UserCheck, QrCode, Loader2 } from "lucide-react";
 import ReceptionistLayout from "@/layouts/ReceptionistLayout";
-import { mockStudents } from "@/data/mockData";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import MembershipBadge from "@/components/MembershipBadge";
-import StatusBadge from "@/components/StatusBadge";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { useApi } from "@/hooks/useApi";
+import {
+  qrCheckIn,
+  qrCheckOut,
+  getOccupancy,
+  type CheckInResponseDTO,
+  type AttendanceSessionDTO,
+} from "@/lib/api";
+
+interface ScanResult {
+  action: "in" | "out";
+  data: CheckInResponseDTO | AttendanceSessionDTO;
+}
 
 export default function ReceptionistScanner() {
+  const [token, setToken] = useState("");
+  const [mode, setMode] = useState<"in" | "out">("in");
   const [scanned, setScanned] = useState(false);
-  const [result, setResult] = useState<typeof mockStudents[0] | null>(null);
-  const [action, setAction] = useState<"in" | "out">("in");
+  const [result, setResult] = useState<ScanResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleScan = () => {
-    const s = mockStudents[Math.floor(Math.random() * 7)];
-    setResult(s);
-    setAction(s.checkedIn ? "out" : "in");
-    setScanned(true);
-    setTimeout(() => setScanned(false), 5000);
+  const { data: occupancy } = useApi(getOccupancy);
+
+  const handleScan = async () => {
+    if (!token.trim()) {
+      setError("Enter a QR token before scanning");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const data = mode === "in" ? await qrCheckIn(token.trim()) : await qrCheckOut(token.trim());
+      setResult({ action: mode, data });
+      setScanned(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Scan failed");
+      setScanned(false);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const resultName = result ? ("studentName" in result.data ? result.data.studentName : (result.data as AttendanceSessionDTO).studentName) : "";
+  const resultSeat = result ? (result.data.seatNumber ?? "—") : "";
+  const resultTime = result
+    ? "studentId" in result.data
+      ? (result.data.checkOutAt
+          ? format(new Date(result.data.checkOutAt), "dd MMM yyyy HH:mm")
+          : "—")
+      : format(new Date(result.data.checkInAt), "dd MMM yyyy HH:mm")
+    : "";
 
   return (
     <ReceptionistLayout>
       <div className="max-w-lg mx-auto space-y-5">
         <div className="text-center">
           <h1 className="text-xl font-bold text-foreground mb-1">QR Scanner</h1>
-          <p className="text-sm text-muted-foreground">Tap the camera area to simulate a scan</p>
+          <p className="text-sm text-muted-foreground">Enter a QR token and tap to scan</p>
+        </div>
+
+        {/* Token + mode */}
+        <div className="space-y-3">
+          <Input
+            value={token}
+            onChange={e => setToken(e.target.value)}
+            placeholder="Paste or scan QR token"
+            className="h-12 text-base"
+            data-testid="qr-token-input"
+          />
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              onClick={() => setMode("in")}
+              variant={mode === "in" ? "default" : "outline"}
+              className="flex-1"
+              data-testid="mode-in"
+            >
+              <CheckCircle2 className="w-4 h-4 mr-1.5" /> Check In
+            </Button>
+            <Button
+              type="button"
+              onClick={() => setMode("out")}
+              variant={mode === "out" ? "default" : "outline"}
+              className="flex-1"
+              data-testid="mode-out"
+            >
+              <XCircle className="w-4 h-4 mr-1.5" /> Check Out
+            </Button>
+          </div>
         </div>
 
         {/* Camera */}
@@ -46,35 +116,44 @@ export default function ReceptionistScanner() {
           />
 
           <div className="absolute inset-0 flex flex-col items-center justify-center text-white/50">
-            <QrCode className="w-16 h-16 mb-3" />
-            <p className="text-sm font-medium">Tap to scan</p>
+            {loading ? (
+              <Loader2 className="w-16 h-16 mb-3 animate-spin" />
+            ) : (
+              <QrCode className="w-16 h-16 mb-3" />
+            )}
+            <p className="text-sm font-medium">{loading ? "Processing..." : "Tap to scan"}</p>
           </div>
         </div>
 
+        {/* Error */}
+        {error && (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive" data-testid="scan-error">
+            {error}
+          </div>
+        )}
+
         {/* Result */}
         <AnimatePresence>
-          {scanned && result && (
+          {scanned && result && !error && (
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 12 }}>
-              <div className={`rounded-2xl border p-5 ${action === "in" ? "border-emerald-500/30 bg-emerald-500/5" : "border-blue-500/30 bg-blue-500/5"}`}>
+              <div className={`rounded-2xl border p-5 ${result.action === "in" ? "border-emerald-500/30 bg-emerald-500/5" : "border-blue-500/30 bg-blue-500/5"}`}>
                 <div className="flex items-center justify-center gap-2 mb-4">
-                  {action === "in"
+                  {result.action === "in"
                     ? <CheckCircle2 className="w-7 h-7 text-emerald-500" />
                     : <XCircle className="w-7 h-7 text-blue-400" />}
-                  <span className={`text-2xl font-black tracking-tight ${action === "in" ? "text-emerald-500" : "text-blue-400"}`}>
-                    CHECKED {action === "in" ? "IN" : "OUT"}
+                  <span className={`text-2xl font-black tracking-tight ${result.action === "in" ? "text-emerald-500" : "text-blue-400"}`}>
+                    CHECKED {result.action === "in" ? "IN" : "OUT"}
                   </span>
                 </div>
                 <div className="flex items-center gap-4 p-4 bg-background/50 rounded-xl">
                   <Avatar className="w-14 h-14">
-                    <AvatarFallback className="text-lg bg-primary/15 text-primary font-bold">{result.name.split(" ").map(n=>n[0]).join("")}</AvatarFallback>
+                    <AvatarFallback className="text-lg bg-primary/15 text-primary font-bold">{resultName.split(" ").map(n=>n[0]).join("")}</AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="text-base font-bold text-foreground">{result.name}</p>
-                    <p className="text-sm text-muted-foreground">Seat {result.seat} · {result.id}</p>
-                    <div className="flex gap-2 mt-1.5">
-                      <MembershipBadge type={result.membership} />
-                      <StatusBadge status={result.status} />
-                    </div>
+                    <p className="text-base font-bold text-foreground">{resultName}</p>
+                    <p className="text-sm text-muted-foreground">Seat {resultSeat}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Occupancy: {occupancy?.currentCount ?? "—"}/{occupancy?.capacity ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">{result.action === "in" ? "Checked in" : "Checked out"}: {resultTime}</p>
                   </div>
                 </div>
               </div>
@@ -86,13 +165,13 @@ export default function ReceptionistScanner() {
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-card border border-card-border rounded-xl p-4 text-center">
             <UserCheck className="w-6 h-6 text-emerald-500 mx-auto mb-1" />
-            <p className="text-2xl font-bold text-emerald-500">{mockStudents.filter(s => s.checkedIn).length}</p>
+            <p className="text-2xl font-bold text-emerald-500">{occupancy?.currentCount ?? "—"}</p>
             <p className="text-xs text-muted-foreground">Currently Inside</p>
           </div>
           <div className="bg-card border border-card-border rounded-xl p-4 text-center">
             <Users className="w-6 h-6 text-indigo-400 mx-auto mb-1" />
-            <p className="text-2xl font-bold text-indigo-400">47</p>
-            <p className="text-xs text-muted-foreground">Today's Total</p>
+            <p className="text-2xl font-bold text-indigo-400">{occupancy?.capacity ?? "—"}</p>
+            <p className="text-xs text-muted-foreground">Total Capacity</p>
           </div>
         </div>
       </div>

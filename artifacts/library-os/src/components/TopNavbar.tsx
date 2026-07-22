@@ -17,6 +17,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useRole } from "@/context/RoleContext";
 import type { Role } from "@/context/RoleContext";
 import { cn } from "@/lib/utils";
+import { logout } from "@/lib/api";
 
 const notifications = [
   { id: 1, title: "New student registered", desc: "Vikram Tiwari joined ReadSpace Pro", time: "2 min ago", read: false },
@@ -27,19 +28,29 @@ const notifications = [
 
 export default function TopNavbar() {
   const { theme, setTheme } = useTheme();
-  const { role, setRole } = useRole();
+  const { role, setRole, session, clearSession } = useRole();
   const [, setLocation] = useLocation();
   const [notifOpen, setNotifOpen] = useState(false);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const roleName = role === "super-admin" ? "Super Admin" : role === "owner" ? "Library Owner" : "Receptionist";
+  const roleName = role === "super-admin" ? "Super Admin" : role === "owner" ? "Library Owner" : role === "receptionist" ? "Receptionist" : "Student";
+  const userName = session?.user?.name ?? "User";
+  const userEmail = session?.user?.email ?? "";
+  const libraryName = session?.library?.name ?? "Library";
+  const userInitials = userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
 
   const handleRoleChange = (newRole: Role) => {
     setRole(newRole);
     if (newRole === "super-admin") setLocation("/admin/dashboard");
     else if (newRole === "owner") setLocation("/dashboard");
     else setLocation("/receptionist/dashboard");
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    clearSession();
+    setLocation("/login");
   };
 
   return (
@@ -61,7 +72,7 @@ export default function TopNavbar() {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs font-medium hidden sm:flex" data-testid="library-switcher">
             <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
-            <span className="text-muted-foreground max-w-[120px] truncate">ReadSpace Pro</span>
+            <span className="text-muted-foreground max-w-[120px] truncate">{libraryName}</span>
             <ChevronDown className="w-3 h-3 text-muted-foreground" />
           </Button>
         </DropdownMenuTrigger>
@@ -152,22 +163,24 @@ export default function TopNavbar() {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm" className="h-8 gap-2 px-2" data-testid="user-menu">
             <Avatar className="w-6 h-6">
-              <AvatarFallback className="bg-primary/20 text-primary text-xs">RS</AvatarFallback>
+              <AvatarFallback className="bg-primary/20 text-primary text-xs">{userInitials}</AvatarFallback>
             </Avatar>
             <ChevronDown className="w-3 h-3 text-muted-foreground hidden sm:block" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuLabel>
-            <p className="text-sm font-medium">Rahul Sharma</p>
-            <p className="text-xs text-muted-foreground font-normal">rahul@readspace.pro</p>
+            <p className="text-sm font-medium">{userName}</p>
+            <p className="text-xs text-muted-foreground font-normal">{userEmail}</p>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem className="gap-2 text-sm"><User className="w-3.5 h-3.5" /> Profile</DropdownMenuItem>
           <DropdownMenuItem className="gap-2 text-sm"><Settings className="w-3.5 h-3.5" /> Settings</DropdownMenuItem>
           <DropdownMenuItem className="gap-2 text-sm"><HelpCircle className="w-3.5 h-3.5" /> Help & Support</DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem className="gap-2 text-sm text-destructive"><LogOut className="w-3.5 h-3.5" /> Log out</DropdownMenuItem>
+          <DropdownMenuItem className="gap-2 text-sm text-destructive cursor-pointer" onClick={handleLogout}>
+            <LogOut className="w-3.5 h-3.5" /> Log out
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </header>

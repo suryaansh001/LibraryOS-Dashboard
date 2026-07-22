@@ -1,21 +1,39 @@
 import { motion } from "framer-motion";
 import { Calendar, Clock, TrendingUp, CheckCircle2 } from "lucide-react";
 import StudentLayout from "@/layouts/StudentLayout";
-import { studentAttendance } from "@/data/studentData";
+import { useApi } from "@/hooks/useApi";
+import { getStudentMeAttendance } from "@/lib/api";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
-export default function StudentAttendance() {
-  const present = studentAttendance.filter(a => a.status === "Present");
-  const absent = studentAttendance.filter(a => a.status === "Absent");
-  const totalHours = present.reduce((acc, a) => {
-    const parts = a.duration.match(/(\d+)h\s(\d+)m/);
-    if (!parts) return acc;
-    return acc + parseInt(parts[1]) * 60 + parseInt(parts[2]);
-  }, 0);
-  const avgMinutes = present.length > 0 ? Math.round(totalHours / present.length) : 0;
+const fmtTime = (d: string) => format(new Date(d), "hh:mm a");
+const fmtDate = (d: string) => format(new Date(d), "dd MMM yyyy");
+const fmtHours = (mins: number) => `${Math.floor(mins / 60)}h ${mins % 60}m`;
 
-  const fmtHours = (mins: number) => `${Math.floor(mins / 60)}h ${mins % 60}m`;
-  const pct = Math.round((present.length / studentAttendance.length) * 100);
+export default function StudentAttendance() {
+  const { data, loading, error } = useApi(getStudentMeAttendance);
+  const sessions = data ?? [];
+
+  const completed = sessions.filter((a) => a.checkOutAt);
+  const totalMinutes = sessions.reduce((acc, a) => acc + (a.durationMinutes ?? 0), 0);
+  const avgMinutes = sessions.length > 0 ? Math.round(totalMinutes / sessions.length) : 0;
+  const pct = sessions.length > 0 ? Math.round((completed.length / sessions.length) * 100) : 0;
+
+  if (loading) {
+    return (
+      <StudentLayout>
+        <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">Loading…</div>
+      </StudentLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <StudentLayout>
+        <div className="flex items-center justify-center h-64 text-sm text-destructive">{error}</div>
+      </StudentLayout>
+    );
+  }
 
   return (
     <StudentLayout>
@@ -27,10 +45,10 @@ export default function StudentAttendance() {
       {/* Monthly summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         {[
-          { label: "Total Visits", value: present.length, icon: CheckCircle2, color: "text-emerald-500", bg: "bg-emerald-500/10 border-emerald-500/20" },
-          { label: "Total Study Hours", value: fmtHours(totalHours), icon: Clock, color: "text-indigo-400", bg: "bg-indigo-500/10 border-indigo-500/20" },
+          { label: "Total Visits", value: sessions.length, icon: CheckCircle2, color: "text-emerald-500", bg: "bg-emerald-500/10 border-emerald-500/20" },
+          { label: "Total Study Hours", value: fmtHours(totalMinutes), icon: Clock, color: "text-indigo-400", bg: "bg-indigo-500/10 border-indigo-500/20" },
           { label: "Avg Daily Hours", value: fmtHours(avgMinutes), icon: TrendingUp, color: "text-sky-400", bg: "bg-sky-500/10 border-sky-500/20" },
-          { label: "Attendance Rate", value: `${pct}%`, icon: Calendar, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" },
+          { label: "Completion Rate", value: `${pct}%`, icon: Calendar, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" },
         ].map((s, i) => {
           const Icon = s.icon;
           return (
@@ -48,15 +66,15 @@ export default function StudentAttendance() {
       {/* Attendance rate bar */}
       <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bg-card border border-card-border rounded-xl p-4 mb-5">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-sm font-semibold">March 2024 Overview</p>
-          <span className={cn("text-sm font-bold", pct >= 80 ? "text-emerald-500" : pct >= 60 ? "text-amber-400" : "text-destructive")}>{pct}% attendance</span>
+          <p className="text-sm font-semibold">Overview</p>
+          <span className={cn("text-sm font-bold", pct >= 80 ? "text-emerald-500" : pct >= 60 ? "text-amber-400" : "text-destructive")}>{pct}% completed</span>
         </div>
         <div className="h-3 bg-muted rounded-full overflow-hidden">
           <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 1, delay: 0.5, ease: "easeOut" }} className={cn("h-full rounded-full", pct >= 80 ? "bg-emerald-500" : pct >= 60 ? "bg-amber-400" : "bg-destructive")} />
         </div>
         <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-          <span>{present.length} days present</span>
-          <span>{absent.length} days absent</span>
+          <span>{completed.length} sessions completed</span>
+          <span>{sessions.length - completed.length} in progress</span>
         </div>
       </motion.div>
 
@@ -69,25 +87,37 @@ export default function StudentAttendance() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                {["Date", "Check In", "Check Out", "Duration", "Status"].map((h, i) => (
+                {["Date", "Check In", "Check Out", "Duration", "Method", "Status"].map((h, i) => (
                   <th key={i} className="text-left text-xs font-medium text-muted-foreground px-4 py-2.5">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {studentAttendance.map((a, i) => (
-                <motion.tr key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.02 }} className={cn("border-b border-border/50 transition-colors", a.status === "Absent" ? "bg-destructive/3 hover:bg-destructive/5" : "hover:bg-muted/30")}>
-                  <td className="px-4 py-3 text-sm font-medium">{a.date}</td>
-                  <td className="px-4 py-3 text-sm">{a.checkIn}</td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground">{a.checkOut}</td>
-                  <td className="px-4 py-3 text-sm font-medium">{a.duration}</td>
-                  <td className="px-4 py-3">
-                    <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-md border", a.status === "Present" ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/20" : "bg-destructive/15 text-destructive border-destructive/20")}>
-                      {a.status}
-                    </span>
-                  </td>
-                </motion.tr>
-              ))}
+              {sessions.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">No attendance records yet</td>
+                </tr>
+              ) : (
+                sessions.map((a, i) => {
+                  const status = a.checkOutAt ? "Completed" : "Active";
+                  return (
+                    <motion.tr key={a.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.02 }} className={cn("border-b border-border/50 transition-colors", status === "Active" ? "bg-amber-500/3 hover:bg-amber-500/5" : "hover:bg-muted/30")}>
+                      <td className="px-4 py-3 text-sm font-medium">{fmtDate(a.checkInAt)}</td>
+                      <td className="px-4 py-3 text-sm">{fmtTime(a.checkInAt)}</td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{a.checkOutAt ? fmtTime(a.checkOutAt) : "—"}</td>
+                      <td className="px-4 py-3 text-sm font-medium">{a.durationMinutes != null ? fmtHours(a.durationMinutes) : "—"}</td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs px-2 py-0.5 rounded-md bg-secondary border border-border text-secondary-foreground font-medium capitalize">{a.checkInMethod}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-md border", status === "Completed" ? "bg-emerald-500/15 text-emerald-500 border-emerald-500/20" : "bg-amber-500/15 text-amber-400 border-amber-500/20")}>
+                          {status}
+                        </span>
+                      </td>
+                    </motion.tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>

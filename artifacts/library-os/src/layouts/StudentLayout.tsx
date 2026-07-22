@@ -10,7 +10,9 @@ import { useTheme } from "@/context/ThemeContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { currentStudent } from "@/data/studentData";
+import { useRole } from "@/context/RoleContext";
+
+const initials = (name: string) => name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 
 const navItems = [
   { label: "Dashboard", href: "/student/dashboard", icon: LayoutDashboard },
@@ -28,6 +30,11 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const [collapsed, setCollapsed] = useState(false);
   const [location] = useLocation();
   const { theme, setTheme } = useTheme();
+  const { session } = useRole();
+
+  const studentName = session?.user?.name ?? "Student";
+  const studentId = session?.user?.id ?? "";
+  const libraryName = session?.library?.name ?? "Library";
 
   const isActive = (href: string) => location === href || location.startsWith(href);
 
@@ -63,7 +70,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
           {!collapsed && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mx-3 mt-3 mb-1 px-2.5 py-2 rounded-lg bg-sky-500/10 border border-sky-500/20">
               <p className="text-xs font-semibold text-sky-400">Student Portal</p>
-              <p className="text-xs text-muted-foreground truncate">{currentStudent.library}</p>
+              <p className="text-xs text-muted-foreground truncate">{libraryName}</p>
             </motion.div>
           )}
         </AnimatePresence>
@@ -102,19 +109,19 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             <TooltipTrigger asChild>
               <div className={cn("flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-sidebar-accent transition-colors cursor-pointer", collapsed && "justify-center")}>
                 <Avatar className="w-7 h-7 flex-shrink-0">
-                  <AvatarFallback className="bg-sky-500/20 text-sky-400 text-xs font-medium">AK</AvatarFallback>
+                  <AvatarFallback className="bg-sky-500/20 text-sky-400 text-xs font-medium">{initials(studentName)}</AvatarFallback>
                 </Avatar>
                 <AnimatePresence>
                   {!collapsed && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-sidebar-foreground truncate">{currentStudent.name}</p>
-                      <p className="text-xs text-sky-400 truncate">Student · {currentStudent.id}</p>
+                      <p className="text-xs font-medium text-sidebar-foreground truncate">{studentName}</p>
+                      <p className="text-xs text-sky-400 truncate">Student · {studentId}</p>
                     </motion.div>
                   )}
                 </AnimatePresence>
               </div>
             </TooltipTrigger>
-            {collapsed && <TooltipContent side="right"><p className="font-medium">{currentStudent.name}</p><p className="text-xs text-sky-400">Student</p></TooltipContent>}
+            {collapsed && <TooltipContent side="right"><p className="font-medium">{studentName}</p><p className="text-xs text-sky-400">Student</p></TooltipContent>}
           </Tooltip>
         </div>
       </motion.aside>
@@ -142,7 +149,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             </Link>
             <Link href="/student/profile" className="hidden md:block">
               <Avatar className="w-7 h-7 cursor-pointer">
-                <AvatarFallback className="bg-sky-500/20 text-sky-400 text-xs font-semibold">AK</AvatarFallback>
+                <AvatarFallback className="bg-sky-500/20 text-sky-400 text-xs font-semibold">{initials(studentName)}</AvatarFallback>
               </Avatar>
             </Link>
             <Link href="/">

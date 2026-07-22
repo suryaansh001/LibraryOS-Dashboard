@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Link } from "wouter";
+import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,15 +11,46 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
+import { login } from "@/lib/api";
+import { useRole } from "@/context/RoleContext";
 
 const schema = z.object({
   email: z.string().email("Enter a valid email"),
   password: z.string().min(6, "Password must be at least 6 characters"),
+  librarySlug: z.string().min(1, "Library slug is required"),
 });
 
 export default function Login() {
   const [showPass, setShowPass] = useState(false);
-  const form = useForm({ resolver: zodResolver(schema), defaultValues: { email: "", password: "" } });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [, setLocation] = useLocation();
+  const { setSession } = useRole();
+  const form = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: { email: "", password: "", librarySlug: import.meta.env.VITE_DEFAULT_LIBRARY_SLUG ?? "readspace-pro" },
+  });
+
+  const onSubmit = form.handleSubmit(async (values) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const session = await login(values);
+      setSession(session);
+
+      if (session.user.role === "student") {
+        setLocation("/student/dashboard");
+      } else if (session.user.role === "receptionist") {
+        setLocation("/receptionist/dashboard");
+      } else {
+        setLocation("/dashboard");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Login failed. Please check your credentials.");
+    } finally {
+      setLoading(false);
+    }
+  });
 
   return (
     <AuthLayout>
@@ -30,12 +62,22 @@ export default function Login() {
         </p>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(() => {})} className="space-y-4">
+          <form onSubmit={onSubmit} className="space-y-4">
             <FormField control={form.control} name="email" render={({ field }) => (
               <FormItem>
                 <Label className="text-sm font-medium">Email address</Label>
                 <FormControl>
                   <Input {...field} type="email" placeholder="you@library.com" className="h-10" data-testid="input-email" />
+                </FormControl>
+                <FormMessage className="text-xs" />
+              </FormItem>
+            )} />
+
+            <FormField control={form.control} name="librarySlug" render={({ field }) => (
+              <FormItem>
+                <Label className="text-sm font-medium">Library slug</Label>
+                <FormControl>
+                  <Input {...field} placeholder="readspace-pro" className="h-10" data-testid="input-library-slug" />
                 </FormControl>
                 <FormMessage className="text-xs" />
               </FormItem>
@@ -59,9 +101,23 @@ export default function Login() {
               </FormItem>
             )} />
 
-            <Button type="submit" className="w-full h-10 gap-2" data-testid="button-submit">
-              Sign in <ArrowRight className="w-4 h-4" />
+            <Button type="submit" className="w-full h-10 gap-2" data-testid="button-submit" disabled={loading}>
+              {loading ? "Signing in..." : (<><ArrowRight className="w-4 h-4" /> Sign in</>)}
             </Button>
+
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2.5"
+              >
+                <p className="text-xs text-destructive font-medium">{error}</p>
+              </motion.div>
+            )}
+
+            <p className="text-xs text-center text-muted-foreground">
+              Demo credentials: <span className="font-mono text-primary">owner@test.com</span> · <span className="font-mono text-primary">password123</span> · slug: <span className="font-mono text-primary">readspace-pro</span>
+            </p>
           </form>
         </Form>
 
