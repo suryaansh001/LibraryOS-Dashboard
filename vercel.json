@@ -1,0 +1,6 @@
+{
+  "buildCommand": "pnpm run build",
+  "outputDirectory": "artifacts/api-server/dist",
+  "installCommand": "pnpm install",
+  "framework": null
+}
